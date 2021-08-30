@@ -1,0 +1,67 @@
+version: "3"
+
+tasks:
+  tfvars:
+    desc: create the tfvars file
+    cmds:
+      - "cp terraform.tfvars.changme terraform.tfvars"
+    sources:
+      - terraform.tfvars.changme
+    generates:
+      - terraform.tfvars
+    silent: true
+    dir: checkly-tf
+
+  destroy-checkly-terraform:
+    desc: Destroy Checkly Tests
+    cmds:
+      - terraform destroy
+    dir: checkly-tf
+
+  checkly-terraform:
+    desc: Deploy the Checkly Tests
+    cmds:
+      - terraform plan
+      - terraform apply
+    dir: checkly-tf
+
+  destroy-inlets-operator:
+    desc: Delete the inlets operator
+    cmds:
+      -  kubectl delete tunnels traefik-tunnel -n kube-system
+      -  helm delete inlets-operator
+
+  inlets-operator:
+    desc: install the inlets operator
+    cmds:
+      - kubectl apply -f https://raw.githubusercontent.com/inlets/inlets-operator/master/artifacts/crds/inlets.inlets.dev_tunnels.yaml
+      - helm repo add inlets https://inlets.github.io/inlets-operator/
+      - helm repo update
+      - kubectl create secret generic inlets-access-key --from-literal inlets-access-key=$ACCESS_KEY
+      - kubectl create secret generic inlets-secret-key --from-literal inlets-secret-key=$SECRET_KEY
+      - helm upgrade inlets-operator --install inlets/inlets-operator --set provider=scaleway,region=nl-ams-1 --set secretKeyFile=/var/secrets/inlets/secret/inlets-secret-key --set organizationID=$ORGANISATION_ID --set inletsProLicense=$LICENSE
+
+  k8s-init-sock-shop:
+    desc: install the sock shop
+    cmds:
+      - kubectl get nodes
+      - kubectl apply -f https://raw.githubusercontent.com/microservices-demo/microservices-demo/master/deploy/kubernetes/complete-demo.yaml
+      - kubectl apply -f socks-ingress.yaml
+
+  init-checkly:
+    desc: Init the TF checkly tests
+    cmds:
+      - terraform init
+    dir: checkly-tf
+
+  default:
+    cmds:
+      - task: init-checkly
+      - task: k8s-init-sock-shop
+      - task: inlets-operator
+      - task: checkly-terraform
+
+  destroy:
+    cmds:
+      - task: destroy-checkly-terraform
+      - task:  destroy-inlets-operator
